@@ -1,0 +1,452 @@
+#!/usr/bin/env bash
+# ryoku-bootstrap — write a Ryoku host for an existing NixOS installation.
+#
+# Reads the running machine (CPU, GPUs, chassis, battery, Wi-Fi, Bluetooth,
+# monitors, locale) and writes hosts/<name>/ in a Ryoku checkout for review:
+#
+#   default.nix                ryoku.* options with what was detected
+#   hardware-configuration.nix a copy of /etc/nixos/hardware-configuration.nix
+#   boot.nix                   boot loader suggestion, locked until reviewed
+#   home.nix                   personal Home Manager settings (git identity)
+#
+# It never runs nixos-rebuild, never edits /etc/nixos, never enables the
+# NVIDIA driver and never guesses disks, partitions, UUIDs or boot options.
+# Nothing is written without --dry-run off and an explicit confirmation.
+#
+# Test hooks: RYOKU_SYSROOT prefixes /sys, /proc and /etc; RYOKU_LSPCI names a
+# file with `lspci -Dnn` output; RYOKU_ARCH overrides `uname -m`.
+
+set -euo pipefail
+
+SYSROOT=${RYOKU_SYSROOT:-}
+PROG=ryoku-bootstrap
+
+usage() {
+  cat <<EOF
+Usage: $PROG --profile minimal|full [options]
+
+  --profile P        Ryoku profile (required): minimal or full
+  --host NAME        flake host name (default: current hostname)
+  --user NAME        desktop user (default: \$SUDO_USER or \$USER)
+  --repo PATH        Ryoku checkout to write into (default: current directory)
+  --state-version V  system.stateVersion when /etc/nixos does not declare it
+  --dry-run          detect and print the files, write nothing
+  --yes              do not ask for confirmation (still never overwrites)
+  --force            replace an existing hosts/NAME (asks first unless --yes)
+  -h, --help         this help
+EOF
+}
+
+die() { echo "$PROG: error: $*" >&2; exit 1; }
+warn() { echo "$PROG: warning: $*" >&2; }
+
+profile="" host="" user="" repo="" state_version="" dry_run=0 assume_yes=0 force=0
+while (($#)); do
+  case "$1" in
+    --profile) profile=${2:-}; shift 2 ;;
+    --host) host=${2:-}; shift 2 ;;
+    --user) user=${2:-}; shift 2 ;;
+    --repo) repo=${2:-}; shift 2 ;;
+    --state-version) state_version=${2:-}; shift 2 ;;
+    --dry-run) dry_run=1; shift ;;
+    --yes) assume_yes=1; shift ;;
+    --force) force=1; shift ;;
+    -h | --help) usage; exit 0 ;;
+    *) usage >&2; die "unknown argument: $1" ;;
+  esac
+done
+
+[[ $profile == "minimal" || $profile == "full" ]] || { usage >&2; die "--profile minimal|full is required"; }
+
+# ── Environment checks ────────────────────────────────────────────────────
+[[ -e $SYSROOT/etc/NIXOS ]] || die "this is not a NixOS system ($SYSROOT/etc/NIXOS missing); install NixOS first"
+
+arch=${RYOKU_ARCH:-$(uname -m)}
+[[ $arch == "x86_64" ]] || die "architecture $arch is not supported yet (Ryoku builds x86_64-linux only)"
+
+repo=${repo:-$PWD}
+repo=$(cd "$repo" && pwd)
+[[ -f $repo/flake.nix && -f $repo/modules/options.nix && -f $repo/ryoku/settings.json ]] \
+  || die "$repo is not a Ryoku checkout (flake.nix, modules/options.nix, ryoku/settings.json)"
+
+if [[ -z $host ]]; then
+  host=$(cat "$SYSROOT/etc/hostname" 2>/dev/null || hostname 2>/dev/null || echo ryoku)
+fi
+host=$(printf '%s' "$host" | tr -c 'A-Za-z0-9_-' '-' | sed 's/-*$//')
+[[ $host =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || die "invalid host name: $host"
+
+user=${user:-${SUDO_USER:-${USER:-}}}
+[[ $user =~ ^[a-z_][a-z0-9_-]*$ ]] || die "invalid or missing user name: '$user' (use --user)"
+[[ $user != "root" ]] || die "the desktop user cannot be root (use --user)"
+user_entry=$(grep -E "^$user:" "$SYSROOT/etc/passwd" 2>/dev/null || true)
+if [[ -z $user_entry ]]; then
+  warn "user $user does not exist yet; Ryoku will create it (set a password with passwd after the first switch)"
+  user_gecos=""
+else
+  user_gecos=$(cut -d: -f5 <<<"$user_entry" | cut -d, -f1)
+fi
+
+hwconf="$SYSROOT/etc/nixos/hardware-configuration.nix"
+[[ -f $hwconf ]] || die "$hwconf not found. Generate it yourself with
+  sudo nixos-generate-config --show-hardware-config > /tmp/hardware-configuration.nix
+review it, place it in /etc/nixos and run $PROG again"
+
+sysconf="$SYSROOT/etc/nixos/configuration.nix"
+if [[ -z $state_version && -f $sysconf ]]; then
+  state_version=$(sed -nE 's/^[[:space:]]*system\.stateVersion[[:space:]]*=[[:space:]]*"([0-9]+\.[0-9]+)".*/\1/p' "$sysconf" | head -1)
+fi
+[[ $state_version =~ ^[0-9]+\.[0-9]+$ ]] || die "system.stateVersion not found in $sysconf; pass the value of your installation with --state-version (never guess it)"
+
+# ── Hardware detection ────────────────────────────────────────────────────
+cpu_vendor=$(sed -nE 's/^vendor_id[[:space:]]*:[[:space:]]*(.*)$/\1/p' "$SYSROOT/proc/cpuinfo" 2>/dev/null | head -1 || true)
+case "$cpu_vendor" in
+  GenuineIntel) cpu=Intel ;;
+  AuthenticAMD) cpu=AMD ;;
+  *) cpu="unknown (${cpu_vendor:-?})" ;;
+esac
+cpu_model=$(sed -nE 's/^model name[[:space:]]*:[[:space:]]*(.*)$/\1/p' "$SYSROOT/proc/cpuinfo" 2>/dev/null | head -1 || true)
+
+if [[ -n ${RYOKU_LSPCI:-} ]]; then
+  lspci_out=$(cat "$RYOKU_LSPCI")
+elif command -v lspci >/dev/null 2>&1; then
+  lspci_out=$(lspci -Dnn 2>/dev/null || true)
+else
+  lspci_out=""
+  warn "lspci not available; GPU detection skipped"
+fi
+
+# 0000:01:00.0 → PCI:1@0:0:0 (decimal bus@domain:device:function, as NixOS wants).
+pci_nix() {
+  local dom bus dev fn
+  IFS=':.' read -r dom bus dev fn <<<"$1"
+  printf 'PCI:%d@%d:%d:%d' "$((16#$bus))" "$((16#$dom))" "$((16#$dev))" "$((16#$fn))"
+}
+
+gpu_lines=$(grep -E '\[03(00|02|80)\]' <<<"$lspci_out" || true)
+intel_gpu="" amd_gpu="" nvidia_gpu="" gpu_names=()
+while IFS= read -r line; do
+  [[ -n $line ]] || continue
+  addr=${line%% *}
+  name=$(sed -E 's/^[^ ]+ [^:]+: //' <<<"$line")
+  gpu_names+=("$name")
+  case "$line" in
+    *"[8086:"*) [[ -n $intel_gpu ]] || intel_gpu=$addr ;;
+    *"[1002:"*) [[ -n $amd_gpu ]] || amd_gpu=$addr ;;
+    *"[10de:"*) [[ -n $nvidia_gpu ]] || nvidia_gpu=$addr ;;
+  esac
+done <<<"$gpu_lines"
+hybrid=0
+[[ -n $nvidia_gpu && (-n $intel_gpu || -n $amd_gpu) ]] && hybrid=1
+
+chassis=$(cat "$SYSROOT/sys/class/dmi/id/chassis_type" 2>/dev/null || echo 0)
+case "$chassis" in
+  8 | 9 | 10 | 11 | 14 | 30 | 31 | 32) form=laptop ;;
+  3 | 4 | 5 | 6 | 7 | 13 | 15 | 16 | 35 | 36) form=desktop ;;
+  *) form=unknown ;;
+esac
+
+battery=0
+for ps in "$SYSROOT"/sys/class/power_supply/*; do
+  [[ -f $ps/type ]] && [[ $(cat "$ps/type") == "Battery" ]] && battery=1
+done
+[[ $form == "unknown" && $battery == 1 ]] && form=laptop
+
+wifi=0
+for n in "$SYSROOT"/sys/class/net/*; do
+  [[ -e $n/wireless || -e $n/phy80211 ]] && wifi=1
+done
+bluetooth=0
+for b in "$SYSROOT"/sys/class/bluetooth/hci*; do
+  [[ -e $b ]] && bluetooth=1
+done
+
+monitors=()
+for st in "$SYSROOT"/sys/class/drm/card*-*/status; do
+  [[ -f $st ]] || continue
+  [[ $(cat "$st") == "connected" ]] || continue
+  conn=$(basename "$(dirname "$st")")
+  conn=${conn#card*-}
+  mode=$(head -1 "$(dirname "$st")/modes" 2>/dev/null || true)
+  monitors+=("$conn${mode:+ ($mode)}")
+done
+
+virt=$( (systemd-detect-virt 2>/dev/null || true) | head -1)
+[[ -n ${RYOKU_SYSROOT:-} ]] && virt=${RYOKU_VIRT:-none}
+
+timezone=""
+if [[ -L $SYSROOT/etc/localtime ]]; then
+  timezone=$(readlink "$SYSROOT/etc/localtime" | sed -E 's#.*/zoneinfo/##')
+fi
+locale=$(sed -nE 's/^LANG=(.*)$/\1/p' "$SYSROOT/etc/locale.conf" 2>/dev/null | head -1 | tr -d '"' || true)
+keymap=$(sed -nE 's/^KEYMAP=(.*)$/\1/p' "$SYSROOT/etc/vconsole.conf" 2>/dev/null | head -1 | tr -d '"' || true)
+# The console keymap is an explicit choice; X11's XkbLayout is often just
+# NixOS's "us" default, so it only decides when the console says nothing.
+x11_layout=$(sed -nE 's/.*XkbLayout"[[:space:]]+"([^"]+)".*/\1/p' "$SYSROOT"/etc/X11/xorg.conf.d/*keyboard* 2>/dev/null | head -1 || true)
+case "$keymap" in
+  "") xkb=${x11_layout:-us} ;;
+  br-abnt2 | br*) xkb=br ;;
+  us | us-*) xkb=us ;;
+  *) xkb=${keymap%%-*} ;;
+esac
+xkb=${xkb%%,*}
+
+efi=0
+[[ -d $SYSROOT/sys/firmware/efi ]] && efi=1
+loader=unknown
+if [[ -f $SYSROOT/boot/loader/loader.conf || -f $SYSROOT/efi/loader/loader.conf ]]; then
+  loader=systemd-boot
+elif [[ -d $SYSROOT/boot/grub ]]; then
+  loader=grub
+fi
+# /boot is often unreadable for users (NixOS mounts it fmask=0077): fall back
+# to what /etc/nixos/configuration.nix declares.
+if [[ $loader == "unknown" && -f $sysconf ]]; then
+  if grep -qE '^[[:space:]]*boot\.loader\.systemd-boot\.enable[[:space:]]*=[[:space:]]*true' "$sysconf"; then
+    loader=systemd-boot
+  elif grep -qE '^[[:space:]]*boot\.loader\.grub\.enable[[:space:]]*=[[:space:]]*true' "$sysconf"; then
+    loader=grub
+  fi
+fi
+
+# ── Summary ───────────────────────────────────────────────────────────────
+yn() { (($1)) && echo yes || echo no; }
+echo "Ryoku bootstrap — detected"
+echo "  host / user        $host / $user${user_gecos:+ ($user_gecos)}"
+echo "  profile            $profile"
+echo "  repo               $repo"
+echo "  architecture       $arch"
+echo "  CPU                $cpu${cpu_model:+ — $cpu_model}"
+if ((${#gpu_names[@]})); then
+  for g in "${gpu_names[@]}"; do echo "  GPU                $g"; done
+else
+  echo "  GPU                none detected"
+fi
+echo "  hybrid graphics    $(yn $hybrid)"
+echo "  form factor        $form (chassis type $chassis), battery: $(yn $battery)"
+echo "  Wi-Fi / Bluetooth  $(yn $wifi) / $(yn $bluetooth)"
+if ((${#monitors[@]})); then
+  for m in "${monitors[@]}"; do echo "  monitor            $m"; done
+else
+  echo "  monitor            none reported by DRM (Hyprland picks them up at runtime)"
+fi
+echo "  virtualization     ${virt:-none}"
+echo "  timezone / locale  ${timezone:-?} / ${locale:-?} (keyboard: $xkb)"
+echo "  firmware / loader  $( ((efi)) && echo UEFI || echo BIOS) / $loader (suggestion only, review required)"
+echo "  stateVersion       $state_version (from $sysconf)"
+[[ -n $nvidia_gpu ]] && echo "  NVIDIA             detected, NOT enabled — see the commented block in default.nix"
+echo
+
+# ── File generation ───────────────────────────────────────────────────────
+nix_str() { printf '"%s"' "$(sed 's/\\/\\\\/g; s/"/\\"/g; s/\$/\\$/g' <<<"$1")"; }
+
+gen_default() {
+  local intel_va=false
+  [[ -n $intel_gpu ]] && intel_va=true
+  cat <<EOF
+{ ... }:
+
+# Generated by ryoku-bootstrap on $(date -u +%Y-%m-%d) — review before switching.
+# Detected: $cpu CPU, $form, battery: $(yn $battery), Wi-Fi: $(yn $wifi), Bluetooth: $(yn $bluetooth).
+
+{
+  imports = [
+    ./hardware-configuration.nix
+    ./boot.nix
+  ];
+
+  networking.hostName = $(nix_str "$host");
+EOF
+  [[ -n $timezone ]] && echo "  time.timeZone = $(nix_str "$timezone");"
+  [[ -n $locale ]] && echo "  i18n.defaultLocale = $(nix_str "$locale");"
+  [[ -n $keymap ]] && echo "  console.keyMap = $(nix_str "$keymap");"
+  cat <<EOF
+
+  # Unfree packages (Steam, VS Code, Spotify, NVIDIA, …) are only pulled in by
+  # the full profile or by drivers you enable below.
+  nixpkgs.config.allowUnfree = $([[ $profile == "full" ]] && echo true || echo false);
+
+  ryoku = {
+    user = {
+      name = $(nix_str "$user");
+      description = $(nix_str "$user_gecos");
+      homeModules = [ ./home.nix ];
+    };
+
+    # minimal | full. Individual features can be switched on or off here:
+    # ryoku.features.{apps,development,networkTools,cybersecurity,virtualization,
+    # gaming,multimedia,printing,flatpak,phoneTools,tailscale,ssh}
+    profile = $(nix_str "$profile");
+
+    hardware.intelVideoAcceleration = $intel_va;
+EOF
+  if [[ -n $nvidia_gpu ]]; then
+    cat <<EOF
+
+    # NVIDIA GPU found at $nvidia_gpu. The proprietary driver is never enabled
+    # automatically: check the card generation (open modules need Turing+),
+    # then uncomment. Bus IDs come from \`lspci -D\`.
+    # hardware.nvidia = {
+    #   enable = true;
+    #   open = true;
+EOF
+    if ((hybrid)); then
+      echo "    #   prime = {"
+      echo "    #     enable = true;"
+      [[ -n $intel_gpu ]] && echo "    #     intelBusId = \"$(pci_nix "$intel_gpu")\";"
+      [[ -n $amd_gpu ]] && echo "    #     amdgpuBusId = \"$(pci_nix "$amd_gpu")\";"
+      echo "    #     nvidiaBusId = \"$(pci_nix "$nvidia_gpu")\";"
+      echo "    #   };"
+    fi
+    echo "    # };"
+  fi
+  cat <<EOF
+
+    desktop = {
+      keyboardLayout = $(nix_str "$xkb");
+      # Hyprland places every monitor automatically; pin them here if needed
+      # (Ryoku Settings › Displays edits them at runtime). Detected:
+EOF
+  if ((${#monitors[@]})); then
+    for m in "${monitors[@]}"; do echo "      #   $m"; done
+  else
+    echo "      #   (none)"
+  fi
+  cat <<EOF
+      # monitors = [ "eDP-1,preferred,0x0,1" ];
+    };
+
+    # Fixed in the privileged Apply helper and in Ryoku Settings at build time.
+    settingsApply = {
+      repoPath = $(nix_str "$repo");
+      flakeHost = $(nix_str "$host");
+    };
+  };
+
+  system.stateVersion = $(nix_str "$state_version");
+}
+EOF
+}
+
+gen_boot() {
+  cat <<EOF
+{ ... }:
+
+# Boot loader — a SUGGESTION read from the running system by ryoku-bootstrap.
+# A wrong boot loader can leave the machine unbootable: compare with your
+# /etc/nixos/configuration.nix (lines quoted below), fix this file, then set
+# ryoku.host.bootReviewed = true. Evaluation fails until you do.
+
+{
+  ryoku.host.bootReviewed = false;
+
+EOF
+  case "$loader" in
+    systemd-boot)
+      echo "  boot.loader.systemd-boot.enable = true;"
+      echo "  boot.loader.efi.canTouchEfiVariables = true;"
+      ;;
+    grub)
+      echo "  boot.loader.grub.enable = true;"
+      if ((efi)); then
+        echo "  boot.loader.grub.efiSupport = true;"
+        echo "  boot.loader.grub.device = \"nodev\";"
+        echo "  boot.loader.efi.canTouchEfiVariables = true;"
+      else
+        echo "  # BIOS GRUB needs the disk it is installed on, e.g. \"/dev/sda\" — never guessed."
+        echo "  boot.loader.grub.device = throw \"set boot.loader.grub.device to your boot disk\";"
+      fi
+      ;;
+    *)
+      echo "  # Boot loader not recognised: copy it from /etc/nixos/configuration.nix."
+      ;;
+  esac
+  echo
+  echo "  # From /etc/nixos/configuration.nix:"
+  if [[ -f $sysconf ]]; then
+    local found=0
+    while IFS= read -r l; do
+      echo "  #   $l"
+      found=1
+    done < <(grep -E '^[[:space:]]*boot\.' "$sysconf" | sed -E 's/^[[:space:]]+//')
+    ((found)) || echo "  #   (no boot.* lines)"
+  else
+    echo "  #   (file not found)"
+  fi
+  echo "}"
+}
+
+gen_home() {
+  cat <<'EOF'
+{ ... }:
+
+# Personal Home Manager settings for this machine's user.
+
+{
+  # programs.git.settings.user = {
+  #   name = "Your Name";
+  #   email = "you@example.com";
+  # };
+}
+EOF
+}
+
+target="$repo/hosts/$host"
+if ((dry_run)); then
+  for f in default.nix boot.nix home.nix; do
+    echo "──── hosts/$host/$f"
+    case "$f" in
+      default.nix) gen_default ;;
+      boot.nix) gen_boot ;;
+      home.nix) gen_home ;;
+    esac
+  done
+  echo "──── hosts/$host/hardware-configuration.nix: copy of $hwconf"
+  echo
+  echo "Dry run: nothing was written."
+  exit 0
+fi
+
+if [[ -e $target ]]; then
+  ((force)) || die "$target already exists; remove it yourself or pass --force (it is replaced, never merged)"
+  warn "$target exists and will be replaced"
+fi
+
+confirm() {
+  ((assume_yes)) && return 0
+  local answer=""
+  if [[ -r /dev/tty ]]; then
+    read -r -p "$1 [y/N] " answer </dev/tty || true
+  fi
+  [[ $answer == "y" || $answer == "Y" ]]
+}
+
+confirm "Write hosts/$host in $repo?" || { echo "Nothing written."; exit 1; }
+
+mkdir -p "$repo/hosts"
+tmp=$(mktemp -d "$repo/hosts/.$host.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+gen_default >"$tmp/default.nix"
+gen_boot >"$tmp/boot.nix"
+gen_home >"$tmp/home.nix"
+cp "$hwconf" "$tmp/hardware-configuration.nix"
+chmod 0644 "$tmp"/*.nix
+chmod 0755 "$tmp"
+if [[ -e $target ]]; then
+  backup="$repo/hosts/.$host.replaced-$(date +%Y%m%d%H%M%S)"
+  mv "$target" "$backup"
+  echo "Previous hosts/$host kept as ${backup#"$repo"/}"
+fi
+mv "$tmp" "$target"
+trap - EXIT
+
+cat <<EOF
+Wrote hosts/$host/ (default.nix, boot.nix, home.nix, hardware-configuration.nix).
+
+Next steps — nothing below has been run:
+  1. Review hosts/$host/boot.nix and set ryoku.host.bootReviewed = true.
+  2. Review hosts/$host/default.nix (features, NVIDIA block, monitors).
+  3. cd $repo && git add hosts/$host     # flakes only see tracked files
+  4. nix build .#nixosConfigurations.$host.config.system.build.toplevel
+  5. sudo nixos-rebuild boot --flake .#$host   # or 'test' first, then 'switch'
+     Roll back from the boot menu or with: sudo nixos-rebuild switch --rollback
+EOF

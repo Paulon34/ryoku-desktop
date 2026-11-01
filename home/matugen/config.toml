@@ -1,0 +1,27 @@
+[config]
+reload_apps = true
+
+[templates.waybar]
+input_path = "@HOME@/.config/matugen/templates/waybar.css"
+output_path = "@HOME@/.config/waybar/colors.css"
+post_hook = "pkill -SIGUSR2 waybar || true"
+
+[templates.rofi]
+input_path = "@HOME@/.config/matugen/templates/rofi.rasi"
+output_path = "@HOME@/.config/rofi/colors.rasi"
+
+[templates.ryoku_palette_json]
+input_path = "@HOME@/.config/matugen/templates/ryoku-palette.json"
+output_path = "@HOME@/.config/ryoku/palette.json"
+
+[templates.ryoku_palette_css]
+input_path = "@HOME@/.config/matugen/templates/ryoku-palette.css"
+output_path = "@HOME@/.config/ryoku/palette.css"
+
+[templates.ryoku_rofi]
+input_path = "@HOME@/.config/matugen/templates/ryoku-rofi.rasi"
+output_path = "@HOME@/.config/ryoku/rofi.rasi"
+
+[templates.ryoku_hyprland]
+input_path = "@HOME@/.config/matugen/templates/ryoku-hyprland.conf"
+output_path = "@HOME@/.config/ryoku/hyprland-colors.conf"

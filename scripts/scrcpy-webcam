@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Pipe an Android phone camera into the NixOS v4l2loopback device for browsers/WebRTC.
+
+set -euo pipefail
+
+V4L2_SINK="${SCRCPY_V4L2_SINK:-/dev/video2}"
+
+ARGS=(
+  --video-source=camera
+  --camera-id=0
+  --camera-size=1280x720
+  --camera-fps=30
+  --video-codec=h264
+  --no-audio
+  --v4l2-sink="${V4L2_SINK}"
+  --no-video-playback
+)
+
+# Extra args from the user (e.g. --serial=DEVICE) are appended as-is.
+ARGS+=("$@")
+
+exec /run/current-system/sw/bin/env -i \
+  HOME="${HOME:-}" \
+  USER="${USER:-}" \
+  PATH="/run/current-system/sw/bin:/usr/bin:/bin" \
+  WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}" \
+  XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" \
+  DISPLAY="${DISPLAY:-}" \
+  /run/current-system/sw/bin/scrcpy "${ARGS[@]}"

@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Wrapper for Scrcpy GUI on NixOS: sanitize camera args and call system scrcpy.
+# In camera mode, also mirrors the stream to the v4l2loopback device for browsers.
+
+set -euo pipefail
+
+V4L2_SINK="${SCRCPY_V4L2_SINK:-/dev/video2}"
+
+CAMERA_MODE=false
+
+for arg in "$@"; do
+  if [[ "$arg" == "--video-source=camera" ]]; then
+    CAMERA_MODE=true
+    break
+  fi
+done
+
+ARGS=()
+skip_next=false
+
+for arg in "$@"; do
+  if $skip_next; then
+    skip_next=false
+    continue
+  fi
+
+  if $CAMERA_MODE; then
+    case "$arg" in
+      --camera-id=*|--camera-size=*|--camera-fps=*|--video-codec=*|--audio-source=*|--no-audio|--v4l2-sink=*|--v4l2-buffer=*)
+        continue
+        ;;
+      --v4l2-sink)
+        # Separate-token form: --v4l2-sink /dev/videoN
+        skip_next=true
+        continue
+        ;;
+    esac
+  fi
+
+  ARGS+=("$arg")
+done
+
+if $CAMERA_MODE; then
+  ARGS+=(
+    --camera-id=0
+    --camera-size=1280x720
+    --camera-fps=30
+    --video-codec=h264
+    --no-audio
+    --v4l2-sink="${V4L2_SINK}"
+  )
+fi
+
+# Clean env avoids AppImage/host library conflicts with NixOS scrcpy.
+exec /run/current-system/sw/bin/env -i \
+  HOME="${HOME:-}" \
+  USER="${USER:-}" \
+  PATH="/run/current-system/sw/bin:/usr/bin:/bin" \
+  WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}" \
+  XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" \
+  DISPLAY="${DISPLAY:-}" \
+  /run/current-system/sw/bin/scrcpy "${ARGS[@]}"
