@@ -1,5 +1,8 @@
 # Third-party notices
 
+Ryoku's original code is licensed under the MIT License (`LICENSE`). The
+files listed below are excluded from that grant and keep their own licence.
+
 Ryoku is configuration and glue around existing projects. This file lists what
 is **in this repository** and comes from someone else, and what Ryoku only
 **uses** from nixpkgs at build time (not redistributed here).
