@@ -17,6 +17,10 @@ Hyprland · DankMaterialShell · Quickshell · Material You · NixOS
 
 ---
 
+## 緑 Ryoku Omarchy Lab (Arch)
+
+Already using Omarchy instead of NixOS? The independent [**Ryoku Omarchy Lab**](./omarchy/README.md) provides Ryoku kanji branding, animated dropdown tray, keyboard shortcuts, power controls, experimental pinch zoom and optional Google Calendar. **It does not install NixOS.**
+
 ## `> what is ryoku?`
 
 **Ryoku Desktop** is an opinionated, configurable desktop experience built *on top of NixOS*. It combines a patched [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell) (DMS) on Quickshell, Hyprland, wallpaper-driven Material You colors and its own **Ryoku Settings** application.
