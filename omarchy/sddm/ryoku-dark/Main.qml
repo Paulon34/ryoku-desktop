@@ -8,6 +8,8 @@ Rectangle {
 
     property string currentUser: userModel.lastUser
     property bool loginFailed: false
+    // Click the avatar to type a different account when lastUser is unavailable.
+    property bool editingUser: false
     property int sessionIndex: {
         for (var i = 0; i < sessionModel.rowCount(); i++) {
             var name = (sessionModel.data(
@@ -19,8 +21,14 @@ Rectangle {
     }
 
     function submitLogin() {
+        var loginName = root.editingUser ? username.text.trim() : (root.currentUser || "")
+        if (!loginName) {
+            root.editingUser = true
+            username.forceActiveFocus()
+            return
+        }
         if (password.text.length > 0)
-            sddm.login(currentUser, password.text, sessionIndex)
+            sddm.login(loginName, password.text, sessionIndex)
     }
 
     Connections {
@@ -60,6 +68,18 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
         }
 
+        TextInput {
+            id: username
+            visible: root.editingUser
+            width: parent.width
+            height: root.editingUser ? 28 : 0
+            text: root.currentUser || ""
+            color: "#FFFFFF"
+            font.pixelSize: 14
+            horizontalAlignment: TextInput.AlignHCenter
+            onAccepted: password.forceActiveFocus()
+        }
+
         Row {
             width: parent.width
             height: 66
@@ -93,7 +113,14 @@ Rectangle {
                     x: 17
                     y: 36
                     color: "#F5F5F5"
+                    MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        root.editingUser = true
+                        username.forceActiveFocus()
+                    }
                 }
+            }
             }
 
             Rectangle {
