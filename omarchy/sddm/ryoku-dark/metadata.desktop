@@ -1,0 +1,7 @@
+[SddmGreeterTheme]
+Name=Ryoku Dark Minimal
+Description=Minimal black and white Ryoku login
+Author=Ryoku
+Type=sddm-theme
+Version=1.0
+QtVersion=6
