@@ -113,14 +113,15 @@ Rectangle {
                     x: 17
                     y: 36
                     color: "#F5F5F5"
-                    MouseArea {
+                }
+
+                MouseArea {
                     anchors.fill: parent
                     onClicked: {
                         root.editingUser = true
                         username.forceActiveFocus()
                     }
                 }
-            }
             }
 
             Rectangle {
