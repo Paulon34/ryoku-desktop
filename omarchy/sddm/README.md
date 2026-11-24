@@ -51,8 +51,8 @@ This removes only the dedicated Ryoku config and returns SDDM's theme selection 
 
 - [x] Pure-black/white layout approved in Qt6 test preview on the development notebook (local preview based on the same design)
 - [ ] Validate the versioned theme's account-switch fallback and console in `--test-mode`
-- [ ] Confirm actual login and `uwsm` session on hardware (PASS_REAL)
+- [x] Confirm actual login and return to the Omarchy `uwsm` desktop on the development notebook (PASS_REAL, user confirmed 2026-11-23)
 - [ ] Test restore to the stock Omarchy greeter
 - [ ] Test multi-monitor behavior if needed
 
-Status: experimental; leave PR **draft** until PASS_REAL. No user profile image or personal data is published.
+Status: actual login confirmed on the development notebook; manual account fallback, restore and multi-monitor checks are still pending. No user profile image or personal data is published.
