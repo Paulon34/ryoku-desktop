@@ -51,11 +51,24 @@ python3 manage-bindings.py apply
 hyprctl reload
 ```
 
+**Validação visual no notebook (2026-11-21):** Super+E abriu o Dolphin com fundo escuro/translúcido, texto branco, seleção azul e ícones Papirus. A inspeção do ambiente do processo disparado diretamente pelo atalho permanece pendente.
+
 Depois, feche todas as janelas do Dolphin e pressione **Super+E**. Se abrir
 com o tema antigo, confirme o processo com `pgrep -a -x dolphin` e confira
 as variáveis em `/proc/<PID>/environ`. Para reverter **apenas os atalhos Ryoku**:
 `python3 manage-bindings.py remove && hyprctl reload`.
 
+### Login minimalista Ryoku Dark (SDDM Qt6)
+
+Tema preto e branco com logotipo 緑 e avatar ao lado da senha. **Opcional:** não substitui a tela de bloqueio nem o tema original do Omarchy. Antes de instalar, confira a prévia e o procedimento de reversão em [SDDM Ryoku Dark](sddm/README.md).
+
+```bash
+bash desktop-polish/ryoku-sddm-dark.sh --plan
+sddm-greeter-qt6 --test-mode --theme sddm/ryoku-dark
+bash desktop-polish/ryoku-sddm-dark.sh --apply
+```
+
+A aplicação altera apenas um arquivo próprio de seleção de tema, sem reiniciar o serviço. Login real e retorno ao desktop confirmados no notebook de desenvolvimento (23/11/2026); resta validar troca manual de usuário e rollback.
 
 ### Bandeja suspensa para baixo
 Revise o código do [fork fldc/omarchy-tray](https://github.com/fldc/omarchy-tray) antes de instalar:

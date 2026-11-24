@@ -54,9 +54,22 @@ python3 manage-bindings.py apply
 hyprctl reload
 ```
 
+**Visual notebook test (2026-11-21):** Super+E opened Dolphin with the expected translucent dark view, white text, blue selection and Papirus icons. Inspecting the environment of the shortcut-launched process remains pending.
+
 Close all Dolphin windows, then press **Super+E**. To remove only the Ryoku
 shortcut overrides, use `python3 manage-bindings.py remove && hyprctl reload`.
 
+### Ryoku Dark Minimal login (SDDM Qt6)
+
+Optional black-and-white greeter with white 緑 mark and avatar beside the password field. It does not replace the Omarchy theme or lock screen. Review the safe preview, install and rollback instructions in [Ryoku Dark SDDM](sddm/README.md).
+
+```bash
+bash desktop-polish/ryoku-sddm-dark.sh --plan
+sddm-greeter-qt6 --test-mode --theme sddm/ryoku-dark
+bash desktop-polish/ryoku-sddm-dark.sh --apply
+```
+
+This selects the theme via a separate config file and never restarts SDDM; login and return to the desktop were confirmed on a development notebook (2026-11-23). Manual user fallback and restore remain to be verified.
 
 ### Dropdown tray (external code)
 Review the [fldc tray fork](https://github.com/fldc/omarchy-tray) before installing; plugins execute QML in your session. It replaces, not duplicates, the stock tray:
