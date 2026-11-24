@@ -58,6 +58,11 @@ com o tema antigo, confirme o processo com `pgrep -a -x dolphin` e confira
 as variáveis em `/proc/<PID>/environ`. Para reverter **apenas os atalhos Ryoku**:
 `python3 manage-bindings.py remove && hyprctl reload`.
 
+### Dolphin e jogos — perfis opcionais
+
+- [Dolphin Sweet Ambar Blue](dolphin/README.pt-BR.md): instalação a partir do repositório original, configuração Qt6ct/Kvantum/Papirus, atalhos Super+E e reversão. **Aparência validada** no notebook; assets de terceiros não incluídos.
+- [Ryoku Games — PRIME Render Offload](gaming/README.pt-BR.md): wrapper `ryoku-game`, Minecraft Flatpak, CurseForge AppImage e Steam. **Experimental:** preferência NVIDIA detectada/configurada; ainda sem prova F3 pós-configuração.
+
 ### Login minimalista Ryoku Dark (SDDM Qt6)
 
 Tema preto e branco com logotipo 緑 e avatar ao lado da senha. **Opcional:** não substitui a tela de bloqueio nem o tema original do Omarchy. Antes de instalar, confira a prévia e o procedimento de reversão em [SDDM Ryoku Dark](sddm/README.md).
