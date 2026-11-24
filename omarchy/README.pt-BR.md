@@ -25,6 +25,18 @@ bash desktop-polish/power-button.sh --apply
 
 Para o Dolphin: `sudo pacman -S --needed dolphin`. Evite forçar a remoção do Nautilus.
 
+### Login minimalista Ryoku Dark (SDDM Qt6)
+
+Tema preto e branco com logotipo 緑 e avatar ao lado da senha. **Opcional:** não substitui a tela de bloqueio nem o tema original do Omarchy. Antes de instalar, confira a prévia e o procedimento de reversão em [SDDM Ryoku Dark](sddm/README.md).
+
+```bash
+bash desktop-polish/ryoku-sddm-dark.sh --plan
+sddm-greeter-qt6 --test-mode --theme sddm/ryoku-dark
+bash desktop-polish/ryoku-sddm-dark.sh --apply
+```
+
+A aplicação altera apenas um arquivo próprio de seleção de tema, sem reiniciar o serviço. PASS_REAL de login ainda pendente.
+
 ### Bandeja suspensa para baixo
 Revise o código do [fork fldc/omarchy-tray](https://github.com/fldc/omarchy-tray) antes de instalar:
 
