@@ -35,7 +35,7 @@ sddm-greeter-qt6 --test-mode --theme sddm/ryoku-dark
 bash desktop-polish/ryoku-sddm-dark.sh --apply
 ```
 
-A aplicação altera apenas um arquivo próprio de seleção de tema, sem reiniciar o serviço. PASS_REAL de login ainda pendente.
+A aplicação altera apenas um arquivo próprio de seleção de tema, sem reiniciar o serviço. Login real e retorno ao desktop confirmados no notebook de desenvolvimento (23/11/2026); resta validar troca manual de usuário e rollback.
 
 ### Bandeja suspensa para baixo
 Revise o código do [fork fldc/omarchy-tray](https://github.com/fldc/omarchy-tray) antes de instalar:
