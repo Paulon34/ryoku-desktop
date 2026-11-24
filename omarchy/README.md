@@ -38,7 +38,7 @@ sddm-greeter-qt6 --test-mode --theme sddm/ryoku-dark
 bash desktop-polish/ryoku-sddm-dark.sh --apply
 ```
 
-This selects the theme via a separate config file and never restarts SDDM; actual hardware login validation is pending.
+This selects the theme via a separate config file and never restarts SDDM; login and return to the desktop were confirmed on a development notebook (2026-11-23). Manual user fallback and restore remain to be verified.
 
 ### Dropdown tray (external code)
 Review the [fldc tray fork](https://github.com/fldc/omarchy-tray) before installing; plugins execute QML in your session. It replaces, not duplicates, the stock tray:
