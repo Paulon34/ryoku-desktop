@@ -28,6 +28,37 @@ bash desktop-polish/power-button.sh --apply
 
 Dolphin is optional: `sudo pacman -S --needed dolphin`. Keep or remove Nautilus only after checking dependencies.
 
+### Dolphin — optional Sweet Ambar Blue (Super+E)
+
+**Super+E** (and Super+Shift+F) launches Dolphin with
+`QT_QPA_PLATFORMTHEME=qt6ct` and `QT_STYLE_OVERRIDE=kvantum`, independent
+of the rest of the Omarchy Qt environment. **Super+Z is unchanged.**
+Themes and icons are **not bundled**: set up the upstream
+[Sweet Ambar Blue Kvantum theme](https://github.com/EliverLara/Sweet/tree/Ambar-Blue/kde/kvantum/Sweet-Ambar-Blue),
+[Sweet color scheme](https://github.com/EliverLara/Sweet/blob/Ambar-Blue/kde/colorschemes/SweetAmbarBlue.colors),
+and **Papirus-Dark** icons separately. Transparency also depends on Kvantum and
+compositor configuration.
+
+Requirements: Dolphin, `qt6ct`, Kvantum, the selected Kvantum style and Dolphin
+color scheme. Test locally without changing the global session:
+
+```bash
+QT_QPA_PLATFORMTHEME=qt6ct QT_STYLE_OVERRIDE=kvantum /usr/bin/dolphin --new-window
+```
+
+Apply the versioned shortcuts with a backup (without replacing unmanaged config):
+
+```bash
+cd ryoku-desktop/omarchy
+python3 manage-bindings.py apply
+hyprctl reload
+```
+
+**Visual notebook test (2026-11-21):** Super+E opened Dolphin with the expected translucent dark view, white text, blue selection and Papirus icons. Inspecting the environment of the shortcut-launched process remains pending.
+
+Close all Dolphin windows, then press **Super+E**. To remove only the Ryoku
+shortcut overrides, use `python3 manage-bindings.py remove && hyprctl reload`.
+
 ### Ryoku Dark Minimal login (SDDM Qt6)
 
 Optional black-and-white greeter with white 緑 mark and avatar beside the password field. It does not replace the Omarchy theme or lock screen. Review the safe preview, install and rollback instructions in [Ryoku Dark SDDM](sddm/README.md).

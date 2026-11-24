@@ -5,8 +5,12 @@ local function dispatch(make)
   return function() return hl.dispatch(make()) end
 end
 -- Dolphin e o gerenciador de arquivos preferido no Ryoku (nao depende do launcher Nautilus).
-o.rebind("SUPER + E", "Arquivos (Dolphin)", { launch = "dolphin" })
-o.rebind("SUPER + SHIFT + F", "Arquivos (Dolphin)", { launch = "dolphin" })
+-- Inicia com Qt6ct/Kvantum mesmo quando Hyprland/uwsm nao herdam o tema do terminal.
+-- As cores (Sweet Ambar Blue) e icones (Papirus-Dark) sao configurados pelo usuario;
+-- nao incluimos temas de terceiros nem tocamos nas configuracoes do Omarchy.
+local dolphin_sweet = { launch = "env QT_QPA_PLATFORMTHEME=qt6ct QT_STYLE_OVERRIDE=kvantum /usr/bin/dolphin" }
+o.rebind("SUPER + E", "Arquivos (Dolphin)", dolphin_sweet)
+o.rebind("SUPER + SHIFT + F", "Arquivos (Dolphin)", dolphin_sweet)
 o.rebind("SUPER + SPACE", "Aplicativos", "omarchy-shell omarchy.dock apps")
 o.rebind("SUPER + ALT + SPACE", "Menu Omarchy", { menu = "root" })
 o.rebind("SUPER + Q", "Fechar janela", dispatch(function() return hl.dsp.window.close() end))
