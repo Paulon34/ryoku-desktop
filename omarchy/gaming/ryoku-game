@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Opt-in NVIDIA PRIME Render Offload for one game/launcher.
+# Never exports these variables globally or changes the Hyprland display GPU.
+set -euo pipefail
+
+if (( $# == 0 )); then
+  printf 'Usage: ryoku-game <executable> [arguments...]\n' >&2
+  exit 64
+fi
+
+exec env \
+  __NV_PRIME_RENDER_OFFLOAD=1 \
+  __GLX_VENDOR_LIBRARY_NAME=nvidia \
+  __VK_LAYER_NV_optimus=NVIDIA_only \
+  "$@"
