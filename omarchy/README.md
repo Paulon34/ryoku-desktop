@@ -59,6 +59,11 @@ hyprctl reload
 Close all Dolphin windows, then press **Super+E**. To remove only the Ryoku
 shortcut overrides, use `python3 manage-bindings.py remove && hyprctl reload`.
 
+### Dolphin and games — optional profiles
+
+- [Dolphin Sweet Ambar Blue](dolphin/README.md): upstream assets, Qt6ct/Kvantum/Papirus setup, Super+E shortcut and rollback. **Appearance verified** on the development notebook; no bundled third-party assets.
+- [Ryoku Games — PRIME Render Offload](gaming/README.md): optional `ryoku-game` wrapper plus Minecraft Flatpak, CurseForge AppImage and Steam instructions. **Experimental:** NVIDIA preference configured; actual game GPU selection not yet verified.
+
 ### Ryoku Dark Minimal login (SDDM Qt6)
 
 Optional black-and-white greeter with white 緑 mark and avatar beside the password field. It does not replace the Omarchy theme or lock screen. Review the safe preview, install and rollback instructions in [Ryoku Dark SDDM](sddm/README.md).
